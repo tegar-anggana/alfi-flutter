@@ -1,8 +1,11 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter_sound/flutter_sound.dart';
+import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
+import 'package:mobile_alfi/recorder_audio/audio_player.dart';
+import 'package:mobile_alfi/recorder_audio/audio_recorder.dart';
 
 void main() {
   runApp(const MyApp());
@@ -32,29 +35,31 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
+  // record thing
+  bool showPlayer = false;
+  String? audioPath;
+  // end
+
   String? _filePath;
   String? _fileName;
   String? _chosenSurah;
-  FlutterSoundPlayer? _player;
-  bool _isPlaying = false;
   bool _processing = false;
   String? _result;
   String? _resultCompleteness;
   String? _resultSimilarity;
+  int _selectedOption = 1; // 0: Upload, 1: Record
   final TextEditingController _ipController =
       TextEditingController(text: 'http://192.168.100.6:5000');
   String _ipAddress = 'http://192.168.100.6:5000';
 
   @override
   void initState() {
+    showPlayer = false;
     super.initState();
-    _player = FlutterSoundPlayer();
-    _player!.openAudioSession();
   }
 
   @override
   void dispose() {
-    _player!.closeAudioSession();
     _ipController.dispose();
     super.dispose();
   }
@@ -64,38 +69,22 @@ class _MyHomePageState extends State<MyHomePage> {
         await FilePicker.platform.pickFiles(type: FileType.audio);
     if (result != null) {
       setState(() {
+        audioPath = result.files.single.path;
+        showPlayer = true;
         _filePath = result.files.single.path;
         _fileName = result.files.single.name;
-        _isPlaying = false;
       });
     }
   }
 
-  void _playAudio() async {
-    if (_filePath != null && !_isPlaying) {
-      await _player!.startPlayer(fromURI: _filePath, codec: Codec.aacADTS);
-      setState(() {
-        _isPlaying = true;
-      });
-    }
-  }
-
-  void _pauseAudio() async {
-    if (_isPlaying) {
-      await _player!.pausePlayer();
-      setState(() {
-        _isPlaying = false;
-      });
-    }
-  }
-
-  void _stopAudio() async {
-    if (_isPlaying) {
-      await _player!.stopPlayer();
-      setState(() {
-        _isPlaying = false;
-      });
-    }
+  void _onStopRecording(path) async {
+    if (kDebugMode) print('Recorded file path: $path');
+    setState(() {
+      audioPath = path;
+      showPlayer = true;
+      _filePath = audioPath;
+      _fileName = audioPath!.split('/').last;
+    });
   }
 
   void _processAudio() async {
@@ -117,9 +106,8 @@ class _MyHomePageState extends State<MyHomePage> {
       var responseData = await response.stream.bytesToString();
       var jsonData = jsonDecode(responseData);
       setState(() {
-        // _result = 'Completeness: ${jsonData['completeness_percentage']}%, '
-        //     'Similarity: ${jsonData['avg_similarity']}%';
-        _resultCompleteness = 'Completeness : ${jsonData['completeness_percentage']}';
+        _resultCompleteness =
+            'Completeness : ${jsonData['completeness_percentage']}';
         _resultSimilarity = 'Similarity : ${jsonData['avg_similarity']}';
       });
     } else {
@@ -158,7 +146,7 @@ class _MyHomePageState extends State<MyHomePage> {
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
+            children: [
               const SizedBox(height: 20),
               TextField(
                 controller: _ipController,
@@ -172,34 +160,127 @@ class _MyHomePageState extends State<MyHomePage> {
                 },
               ),
               const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _pickFile,
-                child: const Text('Upload Audio File (mp3)'),
+              const Text(
+                'Persiapan Audio',
+                textAlign: TextAlign.start,
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
+              const SizedBox(height: 5),
+              Row(
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _selectedOption = 0;
+                        showPlayer = false; // Reset player when switching mode
+                        _filePath = null;
+                        _fileName = null;
+                      });
+                    },
+                    child: Row(
+                      children: [
+                        Radio<int>(
+                          value: 0,
+                          groupValue: _selectedOption,
+                          onChanged: (int? value) {
+                            setState(() {
+                              _selectedOption = value!;
+                              showPlayer =
+                                  false; // Reset player when switching mode
+                              _filePath = null;
+                              _fileName = null;
+                            });
+                          },
+                        ),
+                        const Text('Upload Audio'),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 20),
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _selectedOption = 1;
+                        showPlayer = false; // Reset player when switching mode
+                        _filePath = null;
+                        _fileName = null;
+                      });
+                    },
+                    child: Row(
+                      children: [
+                        Radio<int>(
+                          value: 1,
+                          groupValue: _selectedOption,
+                          onChanged: (int? value) {
+                            setState(() {
+                              _selectedOption = value!;
+                              showPlayer =
+                                  false; // Reset player when switching mode
+                              _filePath = null;
+                              _fileName = null;
+                            });
+                          },
+                        ),
+                        const Text('Record Audio'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _selectedOption == 1
+                  ? Center(
+                      child: showPlayer
+                          ? Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 25),
+                              child: AudioPlayer(
+                                source: audioPath!,
+                                onDelete: () {
+                                  setState(() => showPlayer = false);
+                                },
+                              ),
+                            )
+                          : Recorder(
+                              onStop: (path) {
+                                _onStopRecording(path);
+                              },
+                            ),
+                    )
+                  : Column(
+                      children: [
+                        ElevatedButton(
+                          onPressed: _pickFile,
+                          child: const Text('Upload Audio File (mp3 / wav)'),
+                        ),
+                        const SizedBox(height: 20),
+                        showPlayer
+                            ? Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 25),
+                                child: AudioPlayer(
+                                  source: audioPath!,
+                                  onDelete: () {
+                                    setState(() => showPlayer = false);
+                                  },
+                                ),
+                              )
+                            : const Text('')
+                      ],
+                    ),
               const SizedBox(height: 20),
               if (_fileName != null) ...[
                 Text('File terpilih: $_fileName'),
               ],
               const SizedBox(height: 20),
               if (_filePath != null) ...[
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: <Widget>[
-                    IconButton(
-                      icon: const Icon(Icons.play_arrow),
-                      onPressed: _playAudio,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.pause),
-                      onPressed: _pauseAudio,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.stop),
-                      onPressed: _stopAudio,
-                    ),
-                  ],
-                ),
                 const SizedBox(height: 20),
+                const Text(
+                  'Pilih Surah',
+                  textAlign: TextAlign.start,
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const SizedBox(height: 10),
                 TextField(
                   onChanged: (value) {
                     setState(() {
@@ -210,7 +291,14 @@ class _MyHomePageState extends State<MyHomePage> {
                       labelText: 'Nama Surah (cont. Al-Ikhlas)'),
                 ),
                 const SizedBox(height: 20),
-                ElevatedButton(
+                const SizedBox(height: 20),
+                const Text(
+                  'Cek Hasil',
+                  textAlign: TextAlign.start,
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const SizedBox(height: 10),
+                FilledButton(
                   onPressed: _processing ? null : _processAudio,
                   child: _processing
                       ? const SizedBox(
@@ -222,15 +310,15 @@ class _MyHomePageState extends State<MyHomePage> {
                         )
                       : const Text('Process Audio'),
                 ),
+                const SizedBox(height: 20),
+                if (_resultCompleteness != null) ...[
+                  Text(_resultCompleteness!),
+                ],
+                if (_resultSimilarity != null) ...[
+                  Text(_resultSimilarity!),
+                ],
+                const SizedBox(height: 20),
               ],
-              const SizedBox(height: 20),
-              if (_resultCompleteness != null) ...[
-                Text(_resultCompleteness!),
-              ],
-              if (_resultSimilarity != null) ...[
-                Text(_resultSimilarity!),
-              ],
-              const SizedBox(height: 20),
               TextButton(
                 onPressed: _sendRequest,
                 child: Text('Test keadaan server $_ipAddress'),
