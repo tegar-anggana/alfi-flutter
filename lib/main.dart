@@ -53,7 +53,6 @@ class _MyHomePageState extends State<MyHomePage> {
   List<String> _surahOptions = [];
   String? _selectedSurahOption;
 
-
   @override
   void initState() {
     showPlayer = false;
@@ -79,7 +78,6 @@ class _MyHomePageState extends State<MyHomePage> {
       print('Failed to load options');
     }
   }
-
 
   void _pickFile() async {
     FilePickerResult? result =
@@ -173,6 +171,8 @@ class _MyHomePageState extends State<MyHomePage> {
                 onSubmitted: (value) {
                   setState(() {
                     _ipAddress = value;
+                    _surahOptions = [];
+                    _fetchOptions();
                   });
                 },
               ),
