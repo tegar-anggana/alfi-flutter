@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:mobile_alfi/recorder_audio/audio_player.dart';
 import 'package:mobile_alfi/recorder_audio/audio_recorder.dart';
@@ -42,7 +41,6 @@ class _MyHomePageState extends State<MyHomePage> {
 
   String? _filePath;
   String? _fileName;
-  String? _chosenSurah;
   bool _processing = false;
   String? _result;
   String? _resultCompleteness;
@@ -52,10 +50,15 @@ class _MyHomePageState extends State<MyHomePage> {
       TextEditingController(text: 'http://192.168.100.6:5000');
   String _ipAddress = 'http://192.168.100.6:5000';
 
+  List<String> _surahOptions = [];
+  String? _selectedSurahOption;
+
+
   @override
   void initState() {
     showPlayer = false;
     super.initState();
+    _fetchOptions();
   }
 
   @override
@@ -63,6 +66,20 @@ class _MyHomePageState extends State<MyHomePage> {
     _ipController.dispose();
     super.dispose();
   }
+
+  Future<void> _fetchOptions() async {
+    final response = await http.get(Uri.parse('$_ipAddress/surahs'));
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      setState(() {
+        _surahOptions = List<String>.from(data);
+      });
+    } else {
+      // Handle the error
+      print('Failed to load options');
+    }
+  }
+
 
   void _pickFile() async {
     FilePickerResult? result =
@@ -88,7 +105,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void _processAudio() async {
-    if (_filePath == null || _chosenSurah == null) return;
+    if (_filePath == null || _selectedSurahOption == null) return;
 
     setState(() {
       _processing = true; // Start loading indicator
@@ -96,9 +113,9 @@ class _MyHomePageState extends State<MyHomePage> {
 
     var request = http.MultipartRequest(
       'POST',
-      Uri.parse('$_ipAddress/process_audio'),
+      Uri.parse('$_ipAddress/upload'),
     );
-    request.fields['chosen_surah'] = _chosenSurah!;
+    request.fields['surah'] = _selectedSurahOption!;
     request.files.add(await http.MultipartFile.fromPath('file', _filePath!));
 
     var response = await request.send();
@@ -107,8 +124,8 @@ class _MyHomePageState extends State<MyHomePage> {
       var jsonData = jsonDecode(responseData);
       setState(() {
         _resultCompleteness =
-            'Completeness : ${jsonData['completeness_percentage']}';
-        _resultSimilarity = 'Similarity : ${jsonData['avg_similarity']}';
+            'Persentase Kelengkapan : ${jsonData['persentase_kelengkapan']}';
+        _resultSimilarity = 'Status Lulus : ${jsonData['status_kelulusan']}';
       });
     } else {
       setState(() {
@@ -281,16 +298,31 @@ class _MyHomePageState extends State<MyHomePage> {
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 const SizedBox(height: 10),
-                TextField(
+                DropdownButton(
+                  value: _selectedSurahOption,
+                  hint: const Text('Pilih Surah'),
+                  items: _surahOptions.map((option) {
+                    return DropdownMenuItem(
+                      value: option,
+                      child: Text(option),
+                    );
+                  }).toList(),
                   onChanged: (value) {
                     setState(() {
-                      _chosenSurah = value;
+                      _selectedSurahOption = value;
                     });
                   },
-                  decoration: const InputDecoration(
-                      labelText: 'Nama Surah (cont. Al-Ikhlas)'),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 10),
+                // TextField(
+                //   onChanged: (value) {
+                //     setState(() {
+                //       _chosenSurah = value;
+                //     });
+                //   },
+                //   decoration: const InputDecoration(
+                //       labelText: 'Nama Surah (cont. Al-Ikhlas)'),
+                // ),
                 const SizedBox(height: 20),
                 const Text(
                   'Cek Hasil',
